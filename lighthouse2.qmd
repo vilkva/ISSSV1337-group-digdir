@@ -1,0 +1,226 @@
+---
+title: "lighthouse"
+author: "Ane"
+format: html
+server: shiny
+---
+
+## Shiny Documents
+
+This Quarto document is made interactive using Shiny. Interactive documents allow readers to modify parameters and see the results immediately. Learn more about Shiny interactive documents at <https://quarto.org/docs/interactive/shiny/>.
+
+## Inputs and Outputs
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change. This demonstrates how a standard R plot can be made interactive:
+
+```{r}
+sliderInput("bins", "Number of bins:", 
+            min = 1, max = 50, value = 30)
+plotOutput("distPlot")
+```
+
+```{r}
+#| context: server
+output$distPlot <- renderPlot({
+   x <- faithful[, 2]  # Old Faithful Geyser data
+   bins <- seq(min(x), max(x), length.out = input$bins + 1)
+   hist(x, breaks = bins, col = 'darkgray', border = 'white',
+        xlab = 'Waiting time to next eruption (in mins)',
+        main = 'Histogram of waiting times')
+})
+```
+
+```{r}
+
+#### laste ned light house 
+
+lighthouse_install <- function(prefix = "") {
+  #System Call to install lighthouse on the local machine
+  #Check if Lighthouse and correct Version is allready installed
+  ver <- try(system("lighthouse --version", intern = TRUE))
+  if (ver[1] < 2.7 || grepl( 'Error', ver[1])) {
+    choice <-
+      utils::menu(c("Y", "N"), title = "Are you sure you want to install Lighthouse on your machine?")
+    if (choice == 1) {
+      if (prefix == "") {
+        system("npm install -g lighthouse")
+      } else {
+        system(paste0("npm install --prefix ", prefix, "-g lighthouse"))
+      }
+      install_test <- system("lighthouse --version", intern = TRUE)
+      if (install_test[1] < 2.7) {
+        return(
+          "Something went wrong! Please check if your Computer is able to install Node Modules."
+        )
+      }
+      return("Lighthouse succesfully installed")
+    } else {
+      return("Installation of Lighthouse aborted")
+    }
+  }
+  return("The correct Lighthouse Version is allready installed")
+}
+
+####Installation
+
+install.packages("devtools")
+library(devtools)
+devtools::install_github("dschmeh/lighthouseR")
+install.packages(lighthouse_install())
+lighthouse(page, view = FALSE)
+
+#### 
+##light house chatgpt
+install.packages("webshot2")
+library(webshot2)
+lighthouse_install(local = TRUE)
+
+
+#### light house chatgpt
+
+# Install necessary Node.js packages for Lighthouse using 'webshot2'.
+webshot2::lighthouse_install()
+# Run the Lighthouse audit command using system().
+audit_command <- "npx lighthouse https://ruter.no/ --output=json"
+audit_results <- system(audit_command, intern = TRUE)
+
+# Convert the JSON results to a list or data frame (if needed).
+# You can use jsonlite package to parse JSON data.
+# For example:
+install.packages("jsonlite")
+library(jsonlite)
+audit_results <- fromJSON(audit_results)
+
+# Print the audit results.
+print(audit_results)
+
+
+
+})
+```
+
+
+```{r}
+##laste inn light house forsøk nr 2
+lighthouse_install <- function(prefix = "") {
+  #System Call to install lighthouse on the local machine
+  #Check if Lighthouse and correct Version is allready installed
+  ver <- try(system("lighthouse --version", intern = TRUE))
+  if (ver[1] < 2.7 || grepl( 'Error', ver[1])) {
+    choice <-
+      utils::menu(c("Y", "N"), title = "Are you sure you want to install Lighthouse on your machine?")
+    if (choice == 1) {
+      if (prefix == "") {
+        system("npm install -g lighthouse")
+      } else {
+        system(paste0("npm install --prefix ", prefix, "-g lighthouse"))
+      }
+      install_test <- system("lighthouse --version", intern = TRUE)
+      if (install_test[1] < 2.7) {
+        return(
+          "Something went wrong! Please check if your Computer is able to install Node Modules."
+        )
+      }
+      return("Lighthouse succesfully installed")
+    } else {
+      return("Installation of Lighthouse aborted")
+    }
+  }
+  return("The correct Lighthouse Version is allready installed")
+}
+
+
+
+
+page<-"https://ruter.no"
+lighthouse(page, view = FALSE)
+
+
+####prøve forsøk 3 ((funket ikke))
+
+install.packages("devtools")
+library(devtools)
+
+devtools::install_github("dschmeh/lighthouseR")
+devtools::install_github("dschmeh/lighthouseR", force = TRUE)
+
+
+#funket ikke prøver derfor heller:
+library(webshot2)
+library(jsonlite)
+# Replace 'https://ruter.no/' with the URL of the web page you want to audit.
+ruter <- lighthouse("https://ruter.no/", output = "json")
+
+
+
+
+
+#### hete ut info om ruter #### FUNKER
+library(lighthouseR)
+
+# Kjør Lighthouse-auditen
+ruter <- lighthouse("https://ruter.no/")
+
+# Skriv ut resultatene
+View(ruter)
+
+vy <- lighthouse("https://www.vy.no/")
+View(vy)
+
+### fikk opp at pakken var korrupt aka lighthouse
+#prøver derfor å fjeren for så å laste inn pakken på nytt
+
+remove.packages("lighthouseR")
+
+
+########dette funker ### 
+#laster inn på nytt
+install.packages("lighthouseR")
+library(lighthouseR)
+#pakken ikke tilgjengelig, derfor gjør dette først 
+install.packages("devtools")
+devtools::install_github("dschmeh/lighthouseR")
+##velykket
+
+##prøve å hente ut data om skyss
+library(lighthouseR)
+
+# Kjør Lighthouse-audit på nettstedet
+skyss <- lighthouse("https://www.skyss.no/")
+
+# Vis resultatene
+View(skyss)
+########gikk
+
+##vy gikk ikke
+vy3 <- lighthouse("https://www.vy.no/")
+
+##nav
+nav <- lighthouse("https://www.nav.no/")
+View(nav)
+
+##sas.no
+sas <- lighthouse("https://www.sas.no/")
+
+
+
+```
+
+```{r}
+###
+
+install.packages("devtools")
+devtools::install_github("dschmeh/lighthouseR")
+
+lighthouse_install()
+
+page<-"https://www.r-project.org/"
+lighthouse(page, view = FALSE)
+
+vy <-"https://www.vy.no/"
+lighthouse(vy, view = FALSE)
+
+View(vy)
+
+vy3 <- lighthouse("https://www.vy.no/")
+```
