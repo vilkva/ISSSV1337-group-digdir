@@ -1,0 +1,114 @@
+---
+title: "ISS1337"
+author: "Vilde"
+format: html
+---
+
+```{r}
+#| eval: false
+install.packages("tinytex")
+library(tinytex)
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(readxl)
+library(shiny)
+library(aws.alexa)
+library(gtrendsR)
+```
+
+
+Code for importing, rendering and creating dataframes from Brønnøysundregisteret.
+```{r}
+
+df <- enheter_alle
+
+df <- df %>% 
+  rename(nkode2 = `Næringskode 2`)
+
+df <- df %>% 
+  rename(nkode1 = `Næringskode 1`)
+
+offentlige_sektorkoder <- c("3900", "1520", "1510", "1120", "3100", "6100", "1110", "6500")
+
+offentlige_enheter <- df %>%
+  select(-c(Organisasjonsform.beskrivelse, `Næringskode 3`, `Næringskode 3.beskrivelse`, Hjelpeenhetskode, Hjelpeenhetskode.beskrivelse, `Antall ansatte`, Hjemmeside, Postadresse.adresse, Postadresse.kommune, Postadresse.kommunenummer, Postadresse.land, Postadresse.landkode, Postadresse.postnummer, Postadresse.poststed, Forretningsadresse.adresse, Forretningsadresse.poststed, Forretningsadresse.kommunenummer, Forretningsadresse.land, Forretningsadresse.landkode, `Siste innsendte årsregnskap`, `Registrert i MVA-registeret`, `Registrert i Foretaksregisteret`, `Registrert i Stiftelsesregisteret`, `Registrert i Frivillighetsregisteret`, Stiftelsesdato, FrivilligRegistrertIMvaregisteret, Konkurs, `Under avvikling`, `Under tvangsavvikling eller tvangsoppløsning`, Målform, `Overordnet enhet i offentlig sektor`, `Registreringsdato i Enhetsregisteret`, Forretningsadresse.postnummer)) %>%
+  filter(df$`Institusjonell sektorkode` %in% c("3900", "1520", "1510", "1120", "3100", "6100", "1110", "6500"))
+
+offentlige_enheter <- offentlige_enheter %>%
+  rename(nkode1_beskrivelse = `Næringskode 1.beskrivelse`) %>%
+  rename(nkode2_beskrivelse = `Næringskode 2.beskrivelse`) %>%
+  rename(Kommune = Forretningsadresse.kommune)
+
+nettside <- df %>%
+  select(c(Organisasjonsnummer, Hjemmeside, `Institusjonell sektorkode`)) %>%
+  filter(df$`Institusjonell sektorkode` %in% offentlige_sektorkoder) %>%
+  select(-`Institusjonell sektorkode`)
+
+
+
+```
+  
+    ----Datasettets kvalitet og begrensninger----
+    
+    Etter div. testing ser datasettet ut til å fungere bra og inneholde alle offentlige selskaper som er søkt opp tilfeldig. Men det finnes begrensninger på tjenester som drives av flere bedrifter når vi ønsker å finne nettsted. Et eksempel er vestfold kollektivtrafikk som benytter app     og nettside VKT. VKT eksisterer ikke i Brønnøysundregisteret, og ble opphørt for noen år siden, men hos selskapene BRAKAR og FARTE som drifter VKT finner vi at BRAKAR eksisterer, FARTE eksisterer ikke. Men i datasettet ligger ikke VKT (som er eksisterende nettside / app) oppgitt som hjemmeside hos bedriften.
+    
+    Skoler virker og til å være samlet under kommunens etater f.eks. er OSLO KATEDRALSKOLE kodet under OSLO KOMMUNE UTDANNIGNSETATEN sitt organisasjonsnummer og har ikke egne organisasjonsnumre. Samme gjelder ulike helsetilbud som er underenheter for universitetsykehusene / sykehusene slik som distriktpsykiatriske enheter. Et eksempel er NYDALEN DPS som er kodet under OSLO UNIVERSITETSYKEHUS sitt organisasjonsnummer.
+    
+    Lage egne datasett som inneholder de manglende underenhetene? Eller merge det med datsettet vårt og bare legge NA på org.nr og ha overorndet enhet med i datasettet.
+
+
+Code for sorting and searching for business sectors:
+```{r}
+
+
+matches_separate_word <- grep("\\btransport\\b", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+matches_as_part_of_word <- grep("transport", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+all_matches <- unique(c(matches_separate_word, matches_as_part_of_word))
+print(all_matches)
+
+
+helse_matches_separate_word <- grep("\\bsykehus\\b|\\bsykehjem\\b", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+helse_matches_as_part_of_word <- grep("sykehus", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+helse_all_matches <- unique(c(helse_matches_separate_word, helse_matches_as_part_of_word))
+print(helse_all_matches)
+```
+
+
+Cheching popularity of a website
+```{r}
+
+
+
+orgKode <- offentlige_enheter %>%
+  select(Organisasjonsnummer) %>%
+  filter(offentlige_enheter$Navn == "BRING WAREHOUSING AS")
+
+url <- nettside %>%
+  select(Hjemmeside) %>%
+  filter(nettside$Organisasjonsnummer == orgKode$Organisasjonsnummer)
+
+
+#Kjøre ALEXA krever innlogging og abonnement?
+set_secret_key(key = , secret = )
+traffic_history(url = "https://www.bring.no", start = "20230101", range = 31)
+
+
+#traffic_history(url = url$Hjemmeside, start = "20230101", range = 31)
+
+navn <- offentlige_enheter %>%
+  select(Navn) %>%
+  filter(offentlige_enheter$Navn == "RUTER AS")
+
+
+```
+
+
+
+-----NOTATER-----
+
+For enheter, som f.eks. vy, som inneholder mange underenheter og opererer i flere kommuner og fylker enn bare den som er oppgitt som foretaksadresse.kommune, kan vi evt bruke en funksjon som legger alle enheter (i et business sortert datasett) i grupper som tilhører samme fylke. Brakar f.eks. er oppgitt i Drammen men opererer også i flere andre kommuner. Slik at de er lettere å kjøre risikoanalysen på - evt må risikoanalysen kjøres valgfritt på fylkesnivå eller kommunenivå.
+
+
+
+
