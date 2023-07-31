@@ -1,4 +1,3 @@
-#
 # This is a Shiny web application. You can run the application by clicking
 # the 'Run App' button above.
 #
@@ -25,15 +24,22 @@ ui <- fluidPage(
                                                  "Elektrisitet og Vannkraft" = 3),
                                   
         
-      )
-    ),
+          )
+        ),
     
-   # sidebarLayout(
-        #sidebarPanel("Sidebar panel"),
-       # mainPanel("main panel")(
-      #      tableOutput()
-      #  )
     ),
+   
+   sidebarLayout(
+     sidebarPanel(
+       selectInput("var",
+                   label = "Choose a sector to display",
+                   choices = c("Table for passenger transport business entities", "Table for goods transport business entities",
+                               "Table for air transport"), selected = "Table for passenger transport business entities")
+     ),
+     mainPanel(
+       textOutput("selected_var")
+     )
+   )
 )
  #   )
     
@@ -41,7 +47,18 @@ ui <- fluidPage(
 
 #Definerer server logic
 server <- function(input, output){
-}
+  data_input <- reactive({
+    getSymbols(input$symb, src = "Brønnøysundregisteret",
+               from = input$checkGroup[1], to = input$checkgroup[3],
+               autoassign = FALSE)
+  })
+  
+  output$table <- renderTable(
+    data <- data_input()
+    
+  )
+  }
+
 
 #Kjør app
 shinyApp(ui = ui, server = server)
