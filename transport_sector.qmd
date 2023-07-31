@@ -1,0 +1,96 @@
+---
+title: "ISS1337"
+author: "Vilde"
+format: html
+---
+
+```{r}
+#| eval: false
+#install.packages("tinytex")
+library(tinytex)
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(readxl)
+library(shiny)
+library(aws.alexa)
+library(gtrendsR)
+#install.packages("readxl")
+library(readxl)
+library(writexl)
+```
+
+Import the dataset with all public entitites
+```{r}
+df <- read_excel("all_public_entities.xlsx")
+
+column_names <- colnames(df)
+print(column_names)
+```
+
+With problems with nordic letters, type Sys.setlocale(locale="no_NO") into the Console
+
+
+How to select a sector
+In the grep-function, add a word that describes your sector in general. It is the column`nkode1_beskrivelse` that contains a description that the dataset can be sorted on.
+
+```{r}
+matches_separate_word <- grep("\\btransport\\b|\\bruter\\b", df$`nkode1_beskrivelse`, ignore.case = TRUE, value = TRUE)
+matches_as_part_of_word <- grep("transport|ruter", df$`nkode1_beskrivelse`, ignore.case = TRUE, value = TRUE)
+all_matches <- unique(c(matches_separate_word, matches_as_part_of_word))
+print(all_matches)
+```
+```{r}
+filtered_df <- df[df$nkode1_beskrivelse %in% all_matches, ]
+```
+
+Add some well known transport companies manually. They have in common that nkode1_beskrivelse=="Offentlig administrasjon tilknyttet næringsvirksomhet og arbeidsmarked", and nkode2_beskrivelse == "Kommuneforvaltningen" so transport is neither mentioned.
+```{r}
+ruter <- df[df$Navn == "RUTER AS",]
+atb <- df[df$Navn == "ATB AS",]	
+
+filtered_df <- rbind(filtered_df, ruter)
+filtered_df <- rbind(filtered_df, atb)
+
+```
+
+
+
+See that some transport companies show up with theese details. Transport or no other word that identifies the sector is avaiable
+```{r}
+rar <- df %>%
+  filter(nkode1_beskrivelse =="Offentlig administrasjon tilknyttet næringsvirksomhet og arbeidsmarked" & `Institusjonell sektorkode.beskrivelse` == "Kommuneforvaltningen")
+
+```
+
+Saving dataset so it can be uploaded to Github
+```{r}
+#library(writexl)
+#write_xlsx(filtered_df,"C:\\Users\\Shelg\\Documents\\Summercourse\\ISSSV\\public_transport_companies.xlsx")
+```
+
+Make two datasets, one with entities with websites and the other without
+```{r}
+no_web <- filtered_df %>%
+  filter(is.na(Hjemmeside))
+
+has_web <- filtered_df %>%
+  filter(complete.cases(Hjemmeside))
+```
+
+
+
+
+
+
+
+
+```{r}
+
+#install.packages("writexl")
+library(writexl)
+
+```
+
+
+
