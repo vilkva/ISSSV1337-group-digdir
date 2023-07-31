@@ -90,8 +90,8 @@ url <- nettside %>%
 
 
 #Kjøre ALEXA krever innlogging og abonnement?
-set_secret_key(key = , secret = )
-traffic_history(url = "https://www.bring.no", start = "20230101", range = 31)
+set_secret_key(key = "vildesaa@uio.no", secret = "UUTilsynet")
+traffic_history(url = "https://www.ruter.no", start = "20230601", range = 31)
 
 
 #traffic_history(url = url$Hjemmeside, start = "20230101", range = 31)
