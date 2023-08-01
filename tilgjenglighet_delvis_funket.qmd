@@ -1,0 +1,164 @@
+---
+title: "accessiblity_tabell_forsøk"
+format: html
+editor: visual
+---
+
+```{r}
+##hentet fra dschmeh sin github om Light House
+get_accessibilityscore <- function(list_of_pages,
+                       view = FALSE,
+                       keepFile = FALSE) {
+  #Check the Page input if the URL is correct and includes scheme
+  #if (!isTRUE(grepl("http", page))) {
+   # warning("Scheme (http/https) in the URL is missing")
+  #}
+  
+  #create an empty list to store the direction to the files
+  path_list <- list()
+  
+  #to iterate through the pages to run lighthouse on each through system call
+  for (page in list_of_pages){ 
+  
+    #Call the lighthouse module
+    page_path <- gsub("http(s)?\\:\\/\\/", "", page)
+    path <-
+      paste0(
+        "./",
+        gsub("\\/$","",page_path),
+        "_",
+        Sys.Date(),
+        "_",
+        format(Sys.time(), "%H_%M_%S"),
+        ".report.html"
+      )
+
+    sys_call <-
+      paste0("lighthouse ",
+             page ,
+             " --output-path ",
+             path,
+             " --chrome-flags='--headless'", 
+             if (view == TRUE) {
+               " --view"
+               },
+             " --only-categories=accessibility")
+    s <- system(sys_call, intern = TRUE)
+  
+    path_list <- append(path_list, path)
+  }
+  
+  score_table <- data.frame(Accessibility = character(), Page = character())
+
+  
+  #Now its going to make the report
+  for (path in path_list){ 
+    
+    rawHTML <- paste(readLines(path), collapse = "\n")
+
+    #Get the Scores out of the HTML-File
+    scores <-t(as.data.frame(
+        stringr::str_extract_all(
+          rawHTML,'.(accessibility).,.score.\\:[0-9]{1,3}\\.?[0-9]{0,2}')
+      ))
+    scores <-as.data.frame(gsub('"(accessibility)","score":','',scores)
+      )
+    scores$Page <- as.character(page)
+    output <- paste0(getwd(), gsub("\\.\\/", "\\/", path))
+    #if (isTRUE(keepFile)) {
+     # scores$fullReport <- as.character(output)
+  #  }
+   colnames(scores) <-
+      c("Accessibility",
+        "Page")
+        #if (isTRUE(keepFile)) {"fullReport"}
+      #)
+   rownames(scores) <- as.character(output)
+   
+   score_table <- rbind(score_table, scores)
+  
+    if (!isTRUE(keepFile)) {
+      file.remove(output)}
+  }
+
+  return(score_table)
+}
+```
+
+```{r}
+#samlet alle urls 
+urls <- c(
+ "https://www.kanalbaatene.no", "https://www.srb.no", "https://www.haldenkanalen.no", "https://www.fergene.no", "https://www.plugport.no", "https://www.torp.no", "https://www.stordlufthavn.no", "https://www.krossobanen.no", "https://www.statnett-transport.no", "https://www.bybanen.no", "https://www.trafikkmolde.no", "https://www.gassco.no", "https://www.cargonet.no", "https://www.kolombus.no", "https://www.tbane.no", "https://www.unibuss.no", "https://www.avinor.no", "https://www.kollektivterminaler.no", "https://www.unibuss.no", "https://www.sporveisbussene.no", "https://www.aa-f.kommune.no", "https://www.mb24.no", "https://www.telemarkskanalen.no", "https://www.sporveien.com", "https://www.skyss.no", "https://www.firda-billag.no","https://www.vy.no", "https://www.ruter.no", "https://www.skyss.no", "https://www.atb.no", "https://www.kolumbus.no")
+
+score = get_accessibilityscore(urls)
+##funket ikke
+
+#####prøvde å aktiver lighthouse 
+devtools::install_github("dschmeh/lighthouseR")
+library(lighthouseR)
+##prøvde å hente ut for noen urls men fikk error
+utvalg <- get_accessibilityscore(c("https://www.vy.no", "https://www.ruter.no", "https://www.skyss.no", "https://www.atb.no", "https://www.kolumbus.no"))
+scores <- get_accessibilityscore(urls)
+
+
+##############
+# Function to get accessibility score for a single URL
+get_accessibility_score <- function(url) {
+  tryCatch({
+    accessibility_report <- lighthouse(url, only_categories = "accessibility")
+    accessibility_score <- accessibility_report$lighthouseResult$categories$accessibility$score
+    return(accessibility_score)
+  }, error = function(e) {
+    cat(paste("Error while processing URL:", url, "\n"))
+    return(NA) # Return NA if an error occurs
+  })
+}
+
+# Function to get accessibility scores for multiple URLs
+get_accessibility_scores <- function(urls2) {
+  scores <- data.frame(Page = character(), AccessibilityScore = numeric(), stringsAsFactors = FALSE)
+  for (url in urls2) {
+    accessibility_score <- get_accessibility_score(url)
+    new_row <- data.frame(Page = url, AccessibilityScore = accessibility_score)
+    scores <- rbind(scores, new_row)
+    Sys.sleep(10) # Wait for 10 seconds before fetching data for the next URL
+  }
+  return(scores)
+}
+
+
+###her er tilgjenglighet samlte for noen av nettsidene
+View(accessibility_scores)
+#########men mangler data på ruter, skyss osv.
+
+
+##litt usikker på om det var denne koden som fikk det til å funke?
+
+#Step 1: Define the function to get the accessibility score for a single URL:
+get_accessibility_score <- function(url) {
+  accessibility_report <- lighthouse(url, only_categories = "accessibility")
+  accessibility_score <- accessibility_report$lighthouseResult$categories$accessibility$score
+  return(accessibility_score)
+}
+
+#Step 2: Define the function to get the accessibility scores for multiple URLs:
+get_accessibility_scores <- function(urls) {
+  scores <- data.frame(Page = character(), AccessibilityScore = numeric(), stringsAsFactors = FALSE)
+  for (url in urls) {
+    accessibility_score <- get_accessibility_score(url)
+    new_row <- data.frame(Page = url, AccessibilityScore = accessibility_score)
+    scores <- rbind(scores, new_row)
+    Sys.sleep(10) # Wait for 10 seconds before fetching data for the next URL
+  }
+  return(scores)
+}
+
+#Step 3: Call the get_accessibility_scores function with the list of URLs:
+urls <- c("https://www.vy.no", "https://www.ruter.no", "https://www.skyss.no", "https://www.atb.no", "https://www.kolumbus.no")
+
+accessibility_scores <- get_accessibility_scores(urls)
+
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
