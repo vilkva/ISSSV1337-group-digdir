@@ -81,7 +81,6 @@ tran_enheter_narm[, numeric_cols][is.na(tran_enheter_narm[, numeric_cols])] <- 0
 character_cols <- sapply(tran_enheter_narm, is.character)
 tran_enheter_narm[, character_cols][is.na(tran_enheter_narm[, character_cols])] <- "NA"
 
-
 #### lagre datasettet som en egen fil ####
 write.xlsx(transport_enheter_alle, "data/transport_enheter_alle.xlsx")
 
