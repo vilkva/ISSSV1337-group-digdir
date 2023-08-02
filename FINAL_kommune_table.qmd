@@ -1,0 +1,105 @@
+---
+title: "tabell"
+format: html
+editor: visual
+---
+
+```{r}
+# json-file
+library(jsonlite)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(dplyr)
+
+```
+
+```{r}
+df_age <- read_xlsx('07459_alder.xlsx')
+
+column_names <- c("Kommune", "Age 0-9", "Age 10-19", "Age 20-29", "Age 30-39", "Age 40-49", "Age 50-59", "Age 60-69", "Age 70-79", "Age 80-89", "Age 90-98", "Age 100 or more")
+
+# Assign new row names to the data frame 'df'and clean up the Kommune-column
+colnames(df_age) <- column_names
+
+#Cleaning up the Kommune-column
+df_age$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_age$Kommune)
+
+#remove unescessary rows
+df_age <- df_age %>%
+  slice(-c(1,2,3,4,5))%>%
+  filter(row_number() <= 355)
+
+```
+
+Adding group with no education
+
+```{r}
+
+df_no_edu <- read_xlsx('09429_no_edu.xlsx')
+colnames(df_no_edu) <- c("Kommune", "No_education")
+
+#The same preprocessing from last table, which is used on several datasets
+df_no_edu <- df_no_edu %>%
+  slice(-c(1,2,3,4,5))%>%
+  filter(row_number() <= 355)
+
+df_no_edu$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_no_edu$Kommune)
+
+```
+
+Again, joining the tables
+
+```{r}
+#now the tables are joined
+table <- left_join(df_age, df_no_edu, by = "Kommune")
+table<- distinct(table)
+```
+
+Adding group: pensionists
+
+```{r}
+
+df_pension <- read_xlsx('11746_Pension.xlsx')
+colnames(df_pension) <- c("Kommune", "Pensionist")
+
+df_pension$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_pension$Kommune)
+
+df_pension <- df_pension %>%
+  slice(-c(1,2,3,4))%>%
+  filter(row_number() <= 355)
+
+#Merging the tables
+table <- left_join(table, df_pension, by = "Kommune")
+table<- distinct(table)
+  
+```
+
+Adding population density
+
+```{r}
+df_pop_dens <- read_xlsx('11342_Person_km2.xlsx')
+colnames(df_pop_dens) <- c("Kommune", "Population Density")
+
+df_pop_dens$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_pop_dens$Kommune)
+
+df_pop_dens <- df_pop_dens %>%
+  slice(-c(1,2,3,4))%>%
+  filter(row_number() <= 356)
+
+table <- left_join(table, df_pop_dens, by = "Kommune")
+```
+
+```{r}
+head(table)
+```
+
+Now the categories are visible in a dataframe named Table.
