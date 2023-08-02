@@ -1,0 +1,100 @@
+---
+title: "Webscraper"
+format: html
+editor: visual
+---
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(stringr)
+library(dplyr)
+library(writexl)
+library(openxlsx)
+```
+
+User data and information about data traffick was finally found at similarweb.com.
+
+The entities ruter.no, skyss.no, vy.no, kolumbus.no and atb.no were used as an example to compare user data from the websites from the public entities in the transport sector, with the goal as input in the risk model. Ruter, skyss, kolumbus and atb are regional transport companies mostly offering bus and taxi, while vy is operating the national railways. The entities were chosen at random from different public transport entities found in the Brønnøysundregisteret.
+
+By inspecting the element in the browser, the following code chunks were found containing data about the entities, which on the website is presented in two tables. The first table total visitors, and the other shows more information such as monthly visitors, visit duration etc.
+
+**Comparing total visitors in the period april-june 2023.**
+
+```{r}
+#change "Path_to_html" to the file path to the location of the similarweb_webperformance.html
+total_visits <- read_html("Path_to_html") %>%
+  html_node("#react-app > div > div.sw-layout-no-scroll-container.sw-layout-section > div.sw-layout-no-scroll-container.sw-layout-section-content.fadeIn.sidebar3-push > div.sw-layout-module-inner > span > div > div > span > div.sw-layout-scrollable-element.sw-layout-research.use-sticky-css-rendering > div.sw-page-websiteAnalysis.sw-layout-page > section > div > section > div > div > div:nth-child(1) > div.BaseFlex-iAyFgw.FlexRow-hSdWYo.TopPageWidgetsRow-jueWMh.WWOTopPageWidgetsRowWrap-blHiBq.xxItJ > div:nth-child(1) > div.TableWrapper-bkCFmX.dPxxTb") %>%
+  html_text2()
+
+#using writeLines() will show the pure text from the html and is useful to analyze text patterns and for further data processing for making tables
+writeLines(total_visits)
+
+vektor <- unlist(str_split(total_visits, "\n"))
+number_entities = (length(vektor)-1)/2
+entities = vektor[2:6]
+total_visits= vektor[7:11]
+data_df <- data.frame(Entities = entities, "total_visitors" = total_visits)
+data_df
+
+#following line can be used to store the data table as a xlsx-file
+#write.xlsx(test,path= PATH, rowNames = TRUE)
+```
+
+**Engagement**
+
+```{r}
+#change "Path_to_html" to the file path to the location of the similarweb_webperformance.html
+
+engagement_data <- read_html("C:\\Users\\Shelg\\Documents\\Summercourse\\ISSSV\\similarweb_webperformance.html") %>%
+  html_node("#react-app > div > div.sw-layout-no-scroll-container.sw-layout-section > div.sw-layout-no-scroll-container.sw-layout-section-content.fadeIn.sidebar3-push > div.sw-layout-module-inner > span > div > div > span > div.sw-layout-scrollable-element.sw-layout-research.use-sticky-css-rendering > div.sw-page-websiteAnalysis.sw-layout-page > section > div > section > div > div > div:nth-child(1) > div.FullWidthWrapper-dqGPwX.EngagementOverviewTableWrapper-ldDZKW.dqQaTA") %>%
+  html_text2()
+
+#again using writeLines() how the text is structured to find patterns for making table. See a pattern starting with "enitity".no, following data measuring different qualities for the entity, before again listing up a new domain and data points
+writeLines(engagement_data)
+
+#extracting data, removing noise and assembling into a vector
+vektor <- unlist(str_split(engagement_data, "\n"))
+elements_to_remove <- c("Engagement","Deduplicated audienceBETA","Gain access to more insightsUPGRADE")
+vektor <- vektor[!vektor %in% elements_to_remove]
+
+#Different parts of the vector contains information about the categories and then the data points itself
+categories = vektor[2:8]
+data = vektor[9:length(vektor)]
+
+# Sample text containing the data
+text <- data
+
+# Define regular expressions from analyzing the pattern 
+domain_pattern <- "[a-zA-Z]+\\.[a-zA-Z]+"
+split_pattern <- "[a-zA-Z]{1,200}\\.no"
+
+# merging, then splitting and extracting the text based on the pattern
+text2 <- paste0(text, collapse = " ")
+split_text <- stringr::str_split(text2, split_pattern)
+domains <- unlist(str_extract_all(text, domain_pattern))
+
+#Now processing and wrangling the data to make a table
+wrangle <- unlist(split_text) 
+wrangle <- lapply(test, function(x){
+  
+  y <- str_split(x, "\\s+")
+  y <- unlist(y)
+  y <- stringi::stri_remove_empty(y)
+  
+  return(y)
+  })
+
+traffic_table <- do.call(rbind, wrangle[2:6]) %>%
+  as.data.frame() 
+  
+#finishing the table by changing row names and column names
+traffic_table <- traffic_table %>%
+  magrittr::set_colnames(categories) %>%
+  dplyr::mutate(domain_names = domains) %>%
+  column_to_rownames(var = "domain_names")
+
+print(traffic_table)
+```
+
+An important observation to mention is that the data points in the table is in the data type "characters". If it should be used in a risk model it should be proccessed into "numeric", but unfortunately we did not find the time for this.
