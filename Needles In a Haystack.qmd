@@ -1,0 +1,650 @@
+---
+title: "Needles In a Haystack - Risk Based Approaches to Accessibility Testing"
+author: "Ane Heier, Synnøve Nordvik Helgesen, Vilde Sårheim, Vilde Sylta Kvamme"
+format: pdf
+editor: visual
+echo: true
+bibliography: references.bib
+---
+
+Github repository: https://github.com/vilkva/ISSSV1337-group-digdir.git
+
+```{r}
+# All packages required to run this script
+library(httr)
+library(rjstat)
+library(jsonlite)
+library(readxl)
+library(openxlsx)
+library(dplyr)
+library(readr)
+library(shiny)
+library(aws.alexa)
+library(gtrendsR)
+library(tinytex)
+library(kableExtra)
+library(rvest)
+library(stringr)
+library(xml2)
+library(magrittr)
+library(tidyverse)
+
+```
+
+# Introduction and overview
+
+There is a growing amount of websites and apps in Norway that provide services from shopping to online banking. If these sites are not made with universal design in mind it creates barriers for and accessibility problems for certain users. When sites and apps are universally accessible it creates equal opportunities, and it gives businesses more potential users.
+
+All ICT in Norway must be universally designed. This goes for all websites, apps and self-service machines. Both private and public businesses, associations and organizations must adhere to these regulations. However, there is a difference in regulations between private and public entities. Where the public sector must follow a total of 49 of 78 success criteria in WCAG 2.1 standards. And the private sector must follow a total of 35 success criteria in WCAG 2.0.
+
+The task at hand is divided into two parts. To start off, figure out a method to divide public and private entities. Next create a model or machine learning that can look through datasets and cluster according to risk. Using data available to us, how can we create a risk based selection methodology? In this context risk takes into account things like user base, type of users, age of users, business sector and if the business is private or public. Our societal risk model should answer this question:
+
+*If this business entity's digital services are not universally accessible, what and how large of an impact will that have on society.*
+
+# Process
+
+First we started of looking through the Authority of Universal Design of ICT's webpage and making sure we had enough information to understand what the task entailed. We used mind maps and post it notes to get an overview of the case and brainstorm solutions. And than we made action goals and divided them into tasks of what we wanted to achieve. Our goals were 1) defining the public and private sector, 2) find a way to categorize the entities into private and public by this definition, 3) find one business sector to narrow it down for testing, 4) find user data for the entities in the chosen sector, 5) define and look at ways to measure risk and than 7) applying the risk model. At this point we did not know what kind of data we would be able to access, but set these as our goals.
+
+Decided to limit the business sector that we were going to look at, this was so that the amount of data would be more manageable. The sector we decided on was transport. In this business sector we found both private and public entities, which makes it possible for us to work on a method for separating them.
+
+Next we started to look at working definitions, what is the difference between public and private, and how can we measure risk? In addition to looking at what data we would need. Using mind maps and post-it on a common Miro board, we brainstormed and looked at what we would like to accomplish and what we would need to get there. In reality we ran into some hurdles at this step, mostly due to the lack of data. This will be explained in more detail later on. But one of our hurdles was also finding a definition of the public sector that was possible to do something about, based on the data we had available.
+
+# Data
+
+## The Norwegian business registry
+
+To start off our process we had to look at which datasets were available, their quality and potential limitations. The first, and most important dataset we needed to implement in our analysis was the Norwegian Business Registry. We connected to the dataset via the API for the unit registry and found that the dataset consists of 43 variables and over 1 048 000 observations.
+
+Once we got to know the dataset and its variables we could start selecting variables which were useful for our analysis, and filter out the ones that were not. Our biggest challenge from the beginning was that it was not possible to make a more specified API request, which led to us having to retrieve the full dataset and then do the filtering manually.
+
+```{r}
+# using API to get the data from the Norwegian busisness registry, and saving it
+GET('https://data.brreg.no/enhetsregisteret/api/enheter/lastned/regneark', 
+    write_disk("~/Library/CloudStorage/OneDrive-UniversitetetiOslo/Semester 4/ISSSV1337 – Political Data Science Hackathon/Digdir/ISSSV1337-digdir/data/enheter.xlsx", overwrite = TRUE))
+
+# loading the dataset
+enheter_alle <- read_excel("data/enheter.xlsx")
+
+# removing unessesary variables
+enheter <- enheter_alle %>% 
+  select(-c(`Næringskode 2`, `Næringskode 2.beskrivelse`, `Næringskode 3`, `Næringskode 3.beskrivelse`, Hjelpeenhetskode,Hjelpeenhetskode.beskrivelse, `Antall ansatte`, Postadresse.adresse, Postadresse.kommune, Postadresse.kommunenummer, Postadresse.land, Postadresse.landkode, Postadresse.poststed, Postadresse.postnummer, Forretningsadresse.adresse, Forretningsadresse.poststed, Forretningsadresse.postnummer, Forretningsadresse.kommune, Forretningsadresse.kommunenummer, Forretningsadresse.land, Forretningsadresse.landkode, `Siste innsendte årsregnskap`, `Registreringsdato i Enhetsregisteret`, Stiftelsesdato, FrivilligRegistrertIMvaregisteret, `Registrert i MVA-registeret`, `Registrert i Foretaksregisteret`, `Registrert i Frivillighetsregisteret`, `Registrert i Stiftelsesregisteret`, Konkurs, `Under avvikling`, `Under tvangsavvikling eller tvangsoppløsning`, Målform))
+
+# renaming the variables to make them easier to work with
+enheter <- enheter %>% 
+  rename(organisasjonsnummer = Organisasjonsnummer,
+         navn = Navn, 
+         organisasjonsform_kode = Organisasjonsform.kode,
+         organisasjonsform_beskrivelse = Organisasjonsform.beskrivelse,
+         naeringskode = `Næringskode 1`, 
+         naeringskode_beskrivelse = `Næringskode 1.beskrivelse`, 
+         hjemmeside = Hjemmeside, 
+         institusjonell_sektorkode = `Institusjonell sektorkode`, 
+         institusjonell_sektorkode_beskrivelse = `Institusjonell sektorkode.beskrivelse`,
+         overordnet_enhet = `Overordnet enhet i offentlig sektor`)
+
+# using industrial sectorcodes to filter out transport
+transport_enheter <- subset(enheter, `naeringskode` >= 49 & `naeringskode` <= 53)
+
+# changing the industrial sector codes to numeric to make them easier to work with
+enheter$naeringskode <- as.numeric(enheter$naeringskode)
+
+# not all transport enteties that are public are coded as transport and storage. 
+dir_enheter <- enheter %>% 
+  filter(naeringskode %in% c(84.130)) # 84.130 = public administration associated with business activities and the labor market
+
+# remove organizational links such as municipal technical facilities etc by filtering on "AS"
+tran_dir_enheter <- dir_enheter %>% 
+  filter(organisasjonsform_kode %in% c("AS"))
+
+# combining the two datasets
+transport_enheter_alle <- rbind(transport_enheter, tran_dir_enheter)
+
+# making another dataset where where all NA's are replaced with NA, or if the variable is numeric 0. 
+tran_enheter_narm <- transport_enheter_alle
+
+tran_enheter_narm$overordnet_enhet <- as.numeric(tran_enheter_narm$overordnet_enhet)
+tran_enheter_narm$institusjonell_sektorkode <- as.numeric(tran_enheter_narm$institusjonell_sektorkode)
+
+# Replace NA values with 0 in numeric columns
+numeric_cols <- sapply(tran_enheter_narm, is.numeric)
+tran_enheter_narm[, numeric_cols][is.na(tran_enheter_narm[, numeric_cols])] <- 0
+
+# Replace NA values with "NA" in character columns
+character_cols <- sapply(tran_enheter_narm, is.character)
+tran_enheter_narm[, character_cols][is.na(tran_enheter_narm[, character_cols])] <- "NA"
+
+# save the data
+write.xlsx(transport_enheter_alle, "data/transport_enheter_alle.xlsx")
+
+write.xlsx(tran_enheter_narm, "data/tran_enheter_narm.xlsx")
+
+```
+
+In addition to this we experienced some inconsistencies in the industry sector codes (which are based on EU's NACE [@Næringsgruppering]), where two companies which have the same purpose are coded differently. This made it difficult to only select one sector, as we had to manually go through industrial sector code 84, which is "public administration and defence, and social security schemes subject to public administration" [@Næringsgruppering]. As is shown in the table below on two of four larger bus companies are stored under sector code 84, while Skyss and Kolumbus is stored under sector code 52.
+
+```{r}
+# Select and filter the relevant rows
+table_1 <- tran_enheter_narm %>% 
+  select(navn, naeringskode, naeringskode_beskrivelse) %>% 
+  filter(navn %in% c("RUTER AS", "VESTLAND FYLKESKOMMUNE SKYSS", "ROGALAND KOLLEKTIVTRAFIKK FKF", "ATB AS")) %>% 
+  rename(`Organization Name` = navn,
+         `Industry Code` = naeringskode,
+         `Industry Description` = naeringskode_beskrivelse,)
+
+knitr::kable(table_1, caption = "Illustrating the differences in industrial sector codes")
+
+```
+
+Another limitation is that for a lot of public entities such as entities in the public education sector and health sector all subunits are coded under their superior municipal body. Because of this, no schools are in our dataset.
+
+Some entities mainly consists of their subunits, i.e. Vy. Vy Norge AS has an organization number, but otherwise its variables are N/A, the rest of Vy\'s sectors such as train-, bus-, and taxi services have their own organization number and are coded differently.
+
+In the industrial code descriptions some of the biggest entities such as Ruter and AtB do not have the word \"transport\" or any similar descriptive words, which means that we either have to add them manually or have to search for these descriptions specifically, but that can lead to inconsistency or inefficiency.
+
+```{r}
+#Code for sorting and searching for business sectors:
+
+matches_separate_word <- grep("\\btransport\\b", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+matches_as_part_of_word <- grep("transport", enheter_alle$`Næringskode 1.beskrivelse`, ignore.case = TRUE, value = TRUE)
+all_matches <- unique(c(matches_separate_word, matches_as_part_of_word))
+head(all_matches)
+
+helse_matches_separate_word <- grep("\\bsykehus\\b|\\bsykehjem\\b", enheter_alle$`Næringskode 1.beskrivelse`, 
+                                    ignore.case = TRUE, value = TRUE)
+helse_matches_as_part_of_word <- grep("sykehus", enheter_alle$`Næringskode 1.beskrivelse`, 
+                                      ignore.case = TRUE, value = TRUE)
+helse_all_matches <- unique(c(helse_matches_separate_word, helse_matches_as_part_of_word))
+head(helse_all_matches)
+
+```
+
+A lot of missing on domain names in the Norwegian business registry
+
+```{r}
+df <- enheter_alle
+
+df <- df %>% 
+  rename(nkode2 = `Næringskode 2`)
+
+df <- df %>% 
+  rename(nkode1 = `Næringskode 1`)
+
+offentlige_sektorkoder <- c("3900", "1520", "1510", "1120", "3100", "6100", "1110", "6500")
+
+offentlige_enheter <- df %>%
+  select(-c(Organisasjonsform.beskrivelse, `Næringskode 3`, `Næringskode 3.beskrivelse`, Hjelpeenhetskode,
+            Hjelpeenhetskode.beskrivelse, `Antall ansatte`, Postadresse.adresse, Postadresse.kommune,
+            Postadresse.kommunenummer, Postadresse.land, Postadresse.landkode, Postadresse.postnummer,
+            Postadresse.poststed, Forretningsadresse.adresse, Forretningsadresse.poststed,
+            Forretningsadresse.kommunenummer, Forretningsadresse.land, Forretningsadresse.landkode, 
+            `Siste innsendte årsregnskap`, `Registrert i MVA-registeret`, `Registrert i Foretaksregisteret`,
+            `Registrert i Stiftelsesregisteret`, `Registrert i Frivillighetsregisteret`, Stiftelsesdato,
+            FrivilligRegistrertIMvaregisteret, Konkurs, `Under avvikling`, `Under tvangsavvikling eller tvangsoppløsning`,
+            Målform, `Overordnet enhet i offentlig sektor`, `Registreringsdato i Enhetsregisteret`,
+            Forretningsadresse.postnummer)) %>%
+  filter(df$`Institusjonell sektorkode` %in% c("3900", "1520", "1510", "1120", "3100", "6100", "1110", "6500"))
+
+offentlige_enheter <- offentlige_enheter %>%
+  rename(nkode1_beskrivelse = `Næringskode 1.beskrivelse`) %>%
+  rename(nkode2_beskrivelse = `Næringskode 2.beskrivelse`) %>%
+  rename(Kommune = Forretningsadresse.kommune)
+
+nettside <- df %>%
+  select(c(Organisasjonsnummer, Hjemmeside, `Institusjonell sektorkode`)) %>%
+  filter(df$`Institusjonell sektorkode` %in% offentlige_sektorkoder) %>%
+  select(-`Institusjonell sektorkode`)
+```
+
+## The Norwegian domain registry (Norid)
+
+One of the challenges that the Authority for Universal Design at ICT faced has been to connect to the Norwegian Domain Name Registry, Norid, via an API to easily search for and retrieve business entities\' websites via names or organization numbers. Looking at their website we found that Norid does not offer an API service, and when looking at their search engine and its functions to possibly use webscraping as an alternative we quickly discovered that their search motor is heavily protected by security barriers such as image recognition tests and \"I am not a robot\" calls. Norid writes on their page:
+
+\
+\"To ensure that the information we have on the subscriber cannot be abused we do not hand out lists over domain names and we do not allow downloads in bulk from the database... We have also put limitations on how often a user can search and each search is logged with the information of which IP-address the search comes from. If an address repeatedly searches beyond the limitations put in place, the user will be blocked or limited from further searches until the activity decreases to a normal level.\"(<https://www.norid.no/no/oss/#whois5> )
+
+In our dataset from the Norwegian Entity Register we found that out of a total of 7323 observations of public entities a majority of these do not have their website registered.
+
+```{r}
+# Function to calculate counts of missing and non-missing values
+value_counts <- function(Hjemmeside) {
+  missing <- sum(is.na(Hjemmeside))
+  non_missing <- sum(!is.na(Hjemmeside))
+  return(data.frame(Category = c("Missing", "Non-Missing"), Count = c(missing, non_missing)))
+}
+
+# Calculate counts
+summary_data <- value_counts(nettside$Hjemmeside)
+
+# Create the plot
+ggplot(summary_data, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.3) +
+  theme_minimal() +
+  labs(title = "Missing vs. Non-Missing Values for public entities' websites", x = NULL, y = "Count")
+```
+
+The absence of an API and search barriers on Norid\'s pages limits our access to websites which are not answered in our dataset. Therefore we would possibly have to use other methods which are less reliable, to fetch out the websites of the different entities.
+
+# Private or Public?
+
+This was an important part of our work because the plan was to also incorporate this into the risk model. The reason for this division being so important is as mentioned in the introduction, the different requirements for the public and private sector. But also because the public provide necessary services and have greater consequences if they are not available to the public. For example HelseNorge, which is a service where you can contact your doctor and keep records over medications etc. This is a service that is more important than online shopping. Although an universal accessible online shopping site would give the business more potential customers. 
+
+We started off making a minimum definition of what a public entity is to see if it was possible to apply machine learning techniques to differentiate between public and private entities and see if we could find any possible patterns. However, because the dataset consists of 43 variables the dimensions of our data were impractically big to do any tests on. We looked into many different models that can handle many variables and compress them to reduce the dimensions. We narrowed down our dataset to 10 variables, however trying our tests on this new dataframe took a long time and was ineffective.
+
+Without being able to make the machine learning model for dividing public and private entities, a minimum definition would provide the ability to organizational form which is a part of the Norwegian business registry. With this definition all stock-based companies (AS) and sole proprietorship (ENK) would be coded as private, regardless of whether the state has ownership in the company. This provided some problems, as most of the companies that are within the transport sector are stock-based companies, but just owned by the state or county. Therefore we expanded the definition, but ran into problems with figuring out how to use the definition we wanted, with the data from the Norwegian business registry.
+
+At first we tried to find data on state ownership, which proved to be very difficult. But after getting to know the dataset further we looked more into an interesting variable, their institutional sector codes. These codes proved to be able to differentiate between public and private entities. From this we could finally create a new dataframe which consisted of only public entities with relevant variables, the data frame narrowed down to 7323 observations over 11 variables.
+
+```{r}
+# Loading the data we are going to use
+transport_enheter_alle <- read_excel("data/transport_enheter_alle.xlsx")
+tran_enheter_status <- read_excel("data/tran_enheter_narm.xlsx")
+
+# Making a loop that based on the industrial sector codes gives each entity a status
+check_public_private <- function(sector_code) {
+  public_sector_codes <- c(6100, 6500, 1110, 1120, 1510, 1520)
+  private_sector_codes <- c(2100, 2300, 2500, 3100, 3200, 3500, 3600, 3900, 4100, 4300, 4500, 4900, 5500, 5700, 8200, 8300, 8500)
+
+  if (as.numeric(sector_code) %in% public_sector_codes) {
+    return("Public")
+  } else if (as.numeric(sector_code) %in% private_sector_codes) {
+    return("Private")
+  } else {
+    return("Unknown")
+  }
+}
+
+# Create an empty vector to store results
+company_status <- vector("character", nrow(tran_enheter_status))
+
+# Loop through each row and check public/private status
+for (i in 1:nrow(tran_enheter_status)) {
+  company_status[i] <- check_public_private(tran_enheter_status$institusjonell_sektorkode[i])
+}
+
+# Add the company_status information back to the dataset
+tran_enheter_status$status <- company_status
+
+# saving the datasets
+write.xlsx(tran_enheter_status, "data/tran_enheter_status.xlsx")
+
+# make a dataset that removes the unknown from the status variable
+tran_enheter_unknownrm <- tran_enheter_status %>% 
+  filter(!status %in% c("Unknown"))
+
+# save this dataset
+write.xlsx(tran_enheter_unknownrm, "data/tran_enheter_unknownrm.xlsx")
+```
+
+The discovery of the Institutional sector codes in the Norwegian business registry made it possible for us to use The Norwegian Digitalisation Agency definition.
+
+According to § 1-2 (2) of the Public Administration Act, a public law entity is further specified. There are three conditions:
+a) Established to serve the needs of the general public and not of an industrial or commercial nature,
+b) An independent legal entity, and
+c) Connected to the public sector in one of the following ways:
+
+1.  The entity is primarily funded by public authorities or other public law entities,
+
+2.  The entity's administration is subject to the managerial control of such authorities or entities, or
+
+3.  The entity has an administrative, managerial, or supervisory body where over half of the members are appointed by such authorities or entities.
+
+    All three conditions in a-c must be met. For condition c, it is sufficient for one of the three sub-conditions to be met. Limited companies (AS) are independent legal entities, but in this case, conditions a and c must be assessed.
+
+The way we sorted private and public entities is not quite perfect as it gives some entities the status "unknown", but that category mainly consists of bankruptcy estates, Norwegian-registered foreign enterprises and associations and teams
+
+```{r}
+# show how 
+status_unkown <- tran_enheter_status %>% 
+  filter(status %in% c("Unknown"))
+
+table(status_unkown$organisasjonsform_beskrivelse)
+```
+
+# Societal risk
+
+## Process: Splitting the group
+
+After receiving the case, the group focused on the problem around the "public-private register" before deciding to split up in two. That meant that two group members worked on sorting the The Norwegian Business register, and the two other members focused on the risk-model. At SSB, the group always worked together in the assigned group rooms while focusing on completely different problems, which gave the opportunity to ask each other and exchange ideas, as well as keep each other updated on the two problems. Additionally, we would have sessions where we showed results from the two problems on the big screen, as well as brainstorming using the whiteboard to develop and review the two problems and our approach. As the end goal is to use the private-public-table as input to the risk-model, it was also necessary to keep the other problem in mind.
+
+## Risk model: defining the process
+
+The group did not have much experience with working on risk models, except from working with the "Risk Likelihood"-model, which means to cluster/sort risk based on the sum of the impact and the likelihood of that risk to occur. The group looked at other way of quantifying and measuring risk, but the "Risk Likelihood"-model shaped our way of viewing the process of developing a societal risk-model.
+
+![](https://www.eclipsesuite.com/wp-content/uploads/2022/03/Risk-Matrix.png)
+
+[@image_1]
+
+## Making a prototype
+
+With the focus on an iterative process, the group decided to develop a risk-likelihood-model only evaluating one of the factors mentioned by the Norwegian Digitalisation Agency, which was the user group. The idea behind this approach was that the group could make an oversimplified prototype and then further develop it as we found more data. Before actually defining societal risk, the group tried to find data to different public transportation companies to find some data to play around with. Our first attempt was using Google Analytics, which failed. Then we moved over to use Google Trends, which did not work either. The group then changed the perspective and decided to try to access data that exist about digitally vulnerable user groups, with the goal of developing a model that utilizes regional data to identify county level transport entities with a higher likelihood of encountering societal risks due to non-universally designed websites. 
+
+We defined the process in developing a risk model into the following steps:
+
+1.  Define societal risk in terms of universal accessibility and define digital exclusion
+
+2.  Identify risk factors
+
+3.  Quantify risk factors
+
+4.  Data collection
+
+5.  Risk assessment
+
+6.  Model evaluation
+
+### Define societal risk in terms of universal accessibility
+
+The project description mentions that  \"This risk model will be dependent on creating a metric for calculating social impact of a business entity by taking into account factors like size of the user base; type of user; business sector; age range of users; etc.\" (from Template for case description_Digdir_Needles in a haysatack_risk-based approaches to accessibility testing.pdf). However, what \"risk\" essentially means and what social impact would be, was up to the group to define. 
+
+For defining societal risk in the context of universal accessibility, we ended up with this definition:
+
+*\"Societal risk in website universal design refers to the harm, exclusion, and disadvantages faced by individuals with disabilities, lack of digital ability, or diverse needs due to inaccessible digital content and services. It limits their access to information, services, and opportunities, hindering their integration and participation in society. It also reinforces social inequalities and limits engagement in society."*
+
+To evaluate societal risk, we assess website accessibility barriers, identify affected user groups, and consider the broader implications on social equity, empowerment, and digital inclusion. This includes assessing compliance with accessibility standards, gathering user feedback on usability barriers, and understanding the social and economic consequences of excluding diverse populations from the digital realm."
+
+However, we did not fall on a definition of \"impact/severity\".
+
+### Defining digital exclusion
+
+We used web pages such as SSB.no, uutilsynet.no and Bufdir.no to get a better understanding of the term \"societal risk\" in the context of universal design. In the report  \"Digital sårbarhet: Hvem har høy risiko for å falle utenfor?\" [@Rybalka2022]. The report examines the prerequisites for participating in the public digital offering, as well as identifying factors that increase risk of being excluded from this digital service offering. Although the report does not conclude with what the risk is, it gave us an idea of how we might measure risk. For instance, it uses the term \"digital vulnerability\", which refers to individuals/groups having higher risk of being digitally excluded. This can be influenced by four factors being access barriers, digital skills, bureaucratic competence and health/life situation [@Midtgård2021]. 
+
+### Identifying risk factors
+
+We identified the factors of access barriers, digital skills and health/life situation as relevant factors for the societal risk model. The report also identifies four \"exlusion\"-groups, different \"exlusion\"-indicators as well as characteristics with negative impact on digital exclusion.
+
+The strongest characteristics with the most impact on the probability of digital exclusion were high age (71-79), low or unknown education, retired or being staying-at-home and living in a region with low population density.
+
+### Quantify risk factors
+
+We used the idea of identifying the risk group, and discovered there was regional data about the characteristics above. The idea was then to make a table that could show regions with higher likelihood and risks of having digitally vulnerable users.
+
+To gather data about the risk groups, we primarily used Statistics Norway (SSB) as the source. On the SSB website, we found a considerable amount of information about age, low education, population density, and the number of retirees at the municipality level. It was also possible to obtain data at the county level, but we found more data available at the municipality level and decided to focus on that. We downloaded the SSB data as an xlsx file and imported it into R to create a table by merging the data from SSB.
+
+We utilized Box 2 from the SSB-report, as shown in the image below, to identify the variables that could be especially important to incorporate in the risk model. Box 2 illustrates the factors that have positive or negative impact on the probability of being digitally vulnerable. We chose to focus on the factors that the report suggests individuals consistently have a higher likelihood of falling behind digitally like: high age, low or unknown education, being retired or homestayer/homemaker, and living in an area with low population density.
+
+```{r}
+df_age <- read_xlsx('data/07459_alder.xlsx')
+
+column_names <- c("Kommune", "Age 0-9", "Age 10-19", "Age 20-29", "Age 30-39", "Age 40-49", "Age 50-59", "Age 60-69", "Age 70-79", "Age 80-89", "Age 90-98", "Age 100 or more")
+
+# Assign new row names to the data frame 'df'and clean up the Kommune-column
+colnames(df_age) <- column_names
+
+#Cleaning up the Kommune-column
+df_age$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_age$Kommune)
+
+#remove unescessary rows
+df_age <- df_age %>%
+  slice(-c(1,2,3,4,5))%>%
+  filter(row_number() <= 355)
+
+# Adding group with no education
+
+df_no_edu <- read_xlsx('data/09429_no_edu.xlsx')
+colnames(df_no_edu) <- c("Kommune", "No_education")
+
+#The same preprocessing from last table, which is used on several datasets
+df_no_edu <- df_no_edu %>%
+  slice(-c(1,2,3,4,5))%>%
+  filter(row_number() <= 355)
+
+df_no_edu$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_no_edu$Kommune)
+
+# Again, joining the tables
+
+#now the tables are joined
+table <- left_join(df_age, df_no_edu, by = "Kommune")
+table<- distinct(table)
+
+# Adding group: pensionists
+
+df_pension <- read_xlsx('data/11746_Pension.xlsx')
+colnames(df_pension) <- c("Kommune", "Pensionist")
+
+df_pension$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_pension$Kommune)
+
+df_pension <- df_pension %>%
+  slice(-c(1,2,3,4))%>%
+  filter(row_number() <= 355)
+
+#Merging the tables
+table <- left_join(table, df_pension, by = "Kommune")
+table<- distinct(table)
+
+# Adding population density
+
+df_pop_dens <- read_xlsx('data/11342_Person_km2.xlsx')
+colnames(df_pop_dens) <- c("Kommune", "Population Density")
+
+df_pop_dens$Kommune <- gsub(pattern = "K-", 
+                        replacement = "", 
+                        df_pop_dens$Kommune)
+
+df_pop_dens <- df_pop_dens %>%
+  slice(-c(1,2,3,4))%>%
+  filter(row_number() <= 356)
+
+table <- left_join(table, df_pop_dens, by = "Kommune")
+
+head(table)
+```
+
+### Data collection
+
+#### Google Trends and Analytics
+
+We attempted to use Google Trends to gain insights into search trends. With the help of the gtrendsR package, we could retrieve data such as interest over time and interest by subregion, based on specific keywords. The idea was to use this information to assess the significance of websites, based on how many people were searching for them. However, we encountered some challenges when we discovered that we had exceeded the allowed number of searches. This could have been resolved by implementing the "sys.sleep()" function. However, further investigations into Google Trends revealed that it provides only relative search interest, not exact search volume. For example, data on interest over time would be presented on a scale from 0 to 100, making it difficult to interpret the actual popularity of a search term.
+
+We also considered using Google Analytics to examine target audiences and the number of visitors to websites and apps within the transportation sector. However, we found that Google Analytics is primarily designed for website and app owners, requiring administrator access for configuration and data access. This limited our ability to use the tool.
+
+#### Webscraping and similarweb
+
+User data and information about data traffick was finally found at similarweb.com.
+
+After making the vulnerability-dataset, we decided to try to webscrape sites that contain business data in order to make the risk model. Using Similarweb, following entities were used: Ruter.no, skyss.no, vy.no, kolumbus.no and atb.no. They were picked at random using domain knowledge.
+
+The entities ruter.no, skyss.no, vy.no, kolumbus.no and atb.no were used as an example to compare user data from the websites from the public entities in the transport sector, with the goal as input in the risk model. Ruter, skyss, kolumbus and atb are regional transport companies mostly offering bus and taxi, while vy is operating the national railways. The entities were chosen at random from different public transport entities found in the Brønnøysundregisteret.
+
+By inspecting the element in the browser, the following code chunks were found containing data about the entities, which on the website is presented in two tables. The first table total visitors, and the other shows more information such as monthly visitors, visit duration etc.
+
+**Comparing total visitors in the period april-june 2023.**
+
+```{r}
+#change "Path_to_html" to the file path to the location of the similarweb_webperformance.html
+total_visits <- read_html("/Users/vildekvamme/Library/CloudStorage/OneDrive-UniversitetetiOslo/Semester 4/ISSSV1337 – Political Data Science Hackathon/Digdir/ISSSV1337-digdir/data/similarweb_webperformance.html") %>%
+  html_node("#react-app > div > div.sw-layout-no-scroll-container.sw-layout-section > div.sw-layout-no-scroll-container.sw-layout-section-content.fadeIn.sidebar3-push > div.sw-layout-module-inner > span > div > div > span > div.sw-layout-scrollable-element.sw-layout-research.use-sticky-css-rendering > div.sw-page-websiteAnalysis.sw-layout-page > section > div > section > div > div > div:nth-child(1) > div.BaseFlex-iAyFgw.FlexRow-hSdWYo.TopPageWidgetsRow-jueWMh.WWOTopPageWidgetsRowWrap-blHiBq.xxItJ > div:nth-child(1) > div.TableWrapper-bkCFmX.dPxxTb") %>%
+  html_text2()
+
+#using writeLines() will show the pure text from the html and is useful to analyze text patterns and for further data processing for making tables
+writeLines(total_visits)
+
+vektor <- unlist(str_split(total_visits, "\n"))
+number_entities = (length(vektor)-1)/2
+entities = vektor[2:6]
+total_visits= vektor[7:11]
+data_df <- data.frame(Entities = entities, "total_visitors" = total_visits)
+data_df
+
+#following line can be used to store the data table as a xlsx-file
+#write.xlsx(test,path= PATH, rowNames = TRUE)
+```
+
+**Engagement**
+
+```{r}
+#change "Path_to_html" to the file path to the location of the similarweb_webperformance.html
+
+engagement_data <- read_html("/Users/vildekvamme/Library/CloudStorage/OneDrive-UniversitetetiOslo/Semester 4/ISSSV1337 – Political Data Science Hackathon/Digdir/ISSSV1337-digdir/data/similarweb_webperformance.html") %>%
+  html_node("#react-app > div > div.sw-layout-no-scroll-container.sw-layout-section > div.sw-layout-no-scroll-container.sw-layout-section-content.fadeIn.sidebar3-push > div.sw-layout-module-inner > span > div > div > span > div.sw-layout-scrollable-element.sw-layout-research.use-sticky-css-rendering > div.sw-page-websiteAnalysis.sw-layout-page > section > div > section > div > div > div:nth-child(1) > div.FullWidthWrapper-dqGPwX.EngagementOverviewTableWrapper-ldDZKW.dqQaTA") %>%
+  html_text2()
+
+#again using writeLines() how the text is structured to find patterns for making table. See a pattern starting with "enitity".no, following data measuring different qualities for the entity, before again listing up a new domain and data points
+writeLines(engagement_data)
+
+#extracting data, removing noise and assembling into a vector
+vektor <- unlist(str_split(engagement_data, "\n"))
+elements_to_remove <- c("Engagement","Deduplicated audienceBETA","Gain access to more insightsUPGRADE")
+vektor <- vektor[!vektor %in% elements_to_remove]
+
+#Different parts of the vector contains information about the categories and then the data points itself
+categories = vektor[2:8]
+data = vektor[9:length(vektor)]
+
+# Sample text containing the data
+text <- data
+
+# Define regular expressions from analyzing the pattern 
+domain_pattern <- "[a-zA-Z]+\\.[a-zA-Z]+"
+split_pattern <- "[a-zA-Z]{1,200}\\.no"
+# merging, then splitting and extracting the text based on the pattern
+text2 <- paste0(text, collapse = " ")
+split_text <- stringr::str_split(text2, split_pattern)
+domains <- unlist(str_extract_all(text, domain_pattern))
+
+#Now processing and wrangling the data to make a table
+wrangle <- unlist(split_text) 
+wrangle <- lapply(text, function(x){
+  
+  y <- str_split(x, "\\s+")
+  y <- unlist(y)
+  y <- stringi::stri_remove_empty(y)
+  
+  return(y)
+  })
+
+traffic_table <- do.call(rbind, wrangle[2:6]) %>%
+  as.data.frame() 
+  
+#finishing the table by changing row names and column names
+# traffic_table <- traffic_table %>%
+ # magrittr::set_colnames(categories) %>%
+ # dplyr::mutate(domain_names = domains) %>%
+ # column_to_rownames(var = "domain_names")
+
+# head(traffic_table)
+```
+
+An important observation to mention is that the data points in the table is in the data type "characters". If it should be used in a risk model it should be proccessed into "numeric", but unfortunately we did not find the time for this.
+
+#### Lighthouse
+
+To measure accessibility automatically, we used Lighthouse. Lighthouse bases its accessibility scores on the WCAG 2.0 requirements. Based on this, a website is given a score between 0 and 100, where a higher score indicates better accessibility. Lighthouse can be used by inspecting web pages in the Chrome browser, but it should also be possible to use the tools in R. We attempted this and succeeded by installing Lighthouse and Node.js. We were able to retrieve accessibility data for some websites like: kanalbaatene.no, [srb.no](http://www.srb.no) and [haldenkanalen.no](https://www.haldenkanalen.no). 
+
+Inspired by the code on a Github-repository [@Lighthouse], we were able to automate the process of getting the Accesibility score, but we have also experienced some difficulties with the code sometimes not always working.
+
+```{r}
+### To retrieve the accessibility score, run this code
+
+get_accessibilityscore <- function(list_of_pages,
+                                   view = FALSE,
+                                   keepFile = FALSE) {
+  path_list <- list()
+  
+  for (page in list_of_pages) {
+    
+    # Call the lighthouse module
+    page_path <- gsub("http(s)?\\:\\/\\/", "", page)
+    path <- paste0("./", gsub("\\/$", "", page_path),
+                   "_", Sys.Date(), "_", format(Sys.time(), "%H_%M_%S"),
+                   ".report.html")
+    
+    sys_call <- paste0("lighthouse ",
+                       page,
+                       " --output-path ",
+                       path,
+                       " --chrome-flags='--headless'",
+                       if (view) " --view",
+                       " --only-categories=accessibility")
+    s <- system(sys_call, intern = TRUE)
+    
+    path_list <- append(path_list, path)
+  }
+  
+  score_table <- data.frame(Accessibility = character(), Page = character())
+  
+  for (path in path_list) {
+    rawHTML <- paste(readLines(path), collapse = "\n")
+    
+    scores <- as.data.frame(stringr::str_extract_all(rawHTML,
+                                                     '."(accessibility)","score":[0-9]{1,3}.?[0-9]{0,2}'))
+    scores <- as.data.frame(gsub('"(accessibility)","score":', '', scores))
+    scores$Page <- as.character(page)
+    output <- paste0(getwd(), gsub("\\.\\/", "\\/", path))
+    colnames(scores) <- c("Accessibility", "Page")
+    rownames(scores) <- as.character(output)
+    
+    score_table <- rbind(score_table, scores)
+    
+    if (!keepFile) {
+      file.remove(output)
+    }
+  }
+  
+  return(score_table)
+}
+
+### Function to get accessibility scores for a list of URLs
+get_accessibilityscores <- function(urls) {
+  scores <- data.frame(Page = character(), AccessibilityScore = numeric(),
+                       stringsAsFactors = FALSE)
+  for (url in urls) {
+    accessibility_score <- get_accessibilityscore(url)
+    new_row <- data.frame(Page = url, AccessibilityScore = accessibility_score)
+    scores <- rbind(scores, new_row)
+    Sys.sleep(10) # Wait for 10 seconds before fetching data for the next URL
+  }
+  return(scores)
+}
+
+# List of 3 URLs
+urls <- c("https://www.kanalbaatene.no", "https://www.srb.no", "https://www.haldenkanalen.no")
+
+```
+
+This code got the accessability scores, and worked. But stopped when we gathered all the codes
+
+```{r}
+# Get accessibility scores for the URLs and save them to a data frame 
+#accessibility_scores <- get_accessibilityscores(urls)
+
+# View the data frame with accessibility scores
+#head(accessibility_scores)
+
+### The accessibility scores indicate that 'kanalbaatene' received a score of 0.79, 'srb' received a score of 0.82, and 'haldenkanalen' received the highest score of 0.9. 
+
+```
+
+## Risk assessment and the model
+
+The plan was to combine the data on the private or public status of the entities with the data on accessibility scores as well as user data. The idea is that with the user data we can say something about the reach of the website/app. With data on different disabilities could give us more information on approximately how many would be impacted if the service was not made with universal design in mind. Although universal design benefits everyone, it has a larger impact on people with disabilities.
+
+To be able to combine the data we would also have to figure out a way yo automate the user data collection, and how to run the Lighthouse report in big chunks.
+
+We did not have time to finish making the model.
+
+## Ethical questions
+
+During the process, we also encountered some ethical questions regarding how to choose and weight factors for the risk model. For instance, should we weigh different disabilities differently, and how should we consider that individuals without disabilities may experience digital exclusion as well, which may not be captured if we overly focus on people with disabilities or being in the risk group.
+
+We also attempted to find data on individuals with disabilities by region, but unfortunately, we were unable to locate such data. Some of the information we found was at the national level from NAV. This data included statistics on disabilities such as seizures, hearing impairment, cognition, mobility, mental health, and vision.
+
+However, we believe this data might have potential to be useful, and we hoped to use it as a part of the final societal risk model as it does point out what seems like important factors in terms of risk groups and quantifying risk. We realized that we should also look at the factor \"access barrier\". "What if two regions have the same risk groups, but the level of universal design on the regions' transport websites and apps varies differently?"At this point we decided to see if there were any tools to automate an accessibility-scan over a list of websites so we could add that score to the regional data.
+
+# Conclusion and further work
+
+While working on this project we managed to find a way to filter public and private entities. This was by using the institutional sector codes. As mentioned we used some time trying to find additional data to solve this, but in the end we found the answer by diving deeper into the Norwegian Business registry.
+
+Even though we have decided on focusing on the transport sector, the steps taken can be applied to another business sector as well. But keeping in mind the struggles we experienced dividing by industrial sector codes in The Norwegian Bushiness registry. Most of the steps for retrieving the data would follow the same pattern. As mentioned earlier another limitation is that for a lot of public entities such as entities in the public education sector and health sector all sub units are coded under their superior municipal body. So here you would not be able to use the Norwegian business registry as a starting point, which is what we have done here. Moving on we would have liked to test our methods further and make sure that they are applicable to other business sectors.
+
+If we had more time we would like to work on improving the search and filter model to fetch entities in specific business sector. Both due to how The Authority for Universal Design of ICT carries out their controls, but focusing on one sector. But in addition to this, it makes it easier to test the model one a smaller data set. It also would have been useful to add the missing websites into the Norwegian business registry, this could hopefully help us to use Lighthouse more efficiently. Lastly we would like to further develop a Shiny App we briefly started working on.
+
+Although we have yet to make a model, we have made quite a few steps in the right direction. Trying to solve this task has been a very educational process. A mixture of frustrating data sets and missing/not available data meant that we had to go back to the drawing board and try to find alternative solutions. Fostering good discussions, allowing ourselves to think big and then adapting our ideas to what is possible and the data we have available. It has been a very educational process both in terms of the way in which we worked, but also working on a case that can make an impact.
+
+# References

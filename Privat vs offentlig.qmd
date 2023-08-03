@@ -1,0 +1,90 @@
+---
+title: "Privat vs Offentlig"
+format: pdf
+editor: visual
+---
+
+# Private vs public
+
+```{r, include = FALSE, warning=FALSE}
+# Nødvendige pakker
+library(readr) # reading different file formats
+library(readxl) # reading xlsx
+library(dplyr) # tidying the datasets
+library(rsample) # splitting data into testing and training
+library(rpart) # CART
+library(rpart.plot) # CART plotting 
+library(caret) # making confusion matrix
+library(skimr)
+library(tidyverse) 
+library(openxlsx)
+```
+
+As a part of the task we are going to try to differentiate between public and private entities.
+
+```{r, message=FALSE}
+# Loading the data we are going to use
+transport_enheter_alle <- read_excel("data/transport_enheter_alle.xlsx")
+tran_enheter_status <- read_excel("data/tran_enheter_narm.xlsx")
+
+```
+
+Using this dataset we will try to make a model that can tell if a company is private or public
+
+```{r}
+# Making a loop that based on the industrial sector codes gives each entity a status
+check_public_private <- function(sector_code) {
+  public_sector_codes <- c(6100, 6500, 1110, 1120, 1510, 1520)
+  private_sector_codes <- c(2100, 2300, 2500, 3100, 3200, 3500, 3600, 3900, 4100, 4300, 4500, 4900, 5500, 5700, 8200, 8300, 8500)
+
+  if (as.numeric(sector_code) %in% public_sector_codes) {
+    return("Public")
+  } else if (as.numeric(sector_code) %in% private_sector_codes) {
+    return("Private")
+  } else {
+    return("Unknown")
+  }
+}
+
+# Create an empty vector to store results
+company_status <- vector("character", nrow(tran_enheter_status))
+
+# Loop through each row and check public/private status
+for (i in 1:nrow(tran_enheter_status)) {
+  company_status[i] <- check_public_private(tran_enheter_status$institusjonell_sektorkode[i])
+}
+
+# Add the company_status information back to the dataset
+tran_enheter_status$status <- company_status
+
+# Print the updated dataset
+print(tran_enheter_status)
+```
+
+Remove all text from the dataset to try and cluster based on the organisation number, sectorcodes and institutional sectorcodes.
+
+```{r}
+tran_enheter_num <- tran_enheter_status %>% 
+  select(-c(navn, organisasjonsform_kode, organisasjonsform_beskrivelse, naeringskode_beskrivelse, hjemmeside, institusjonell_sektorkode_beskrivelse, overordnet_enhet, status))
+
+test <- tran_enheter_staus%>% 
+  filter(institusjonell_sektorkode %in% c(0))
+
+table(test$organisasjonsform_beskrivelse)
+
+```
+
+Saving all of the used datasets to my computer so they are easier to access for the others. And making a dataset where the unkown are removed, these largely consist of foreign entities registered in Norway and bankruptcy estates
+
+```{r}
+write.xlsx(tran_enheter_status, "data/tran_enheter_status.xlsx")
+
+# make a dataset that removes the unknown from the status variable
+tran_enheter_unknownrm <- tran_enheter_status %>% 
+  filter(!status %in% c("Unknown"))
+
+# save this dataset
+write.xlsx(tran_enheter_unknownrm, "data/tran_enheter_unknownrm.xlsx")
+
+```
+
