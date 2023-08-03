@@ -1,0 +1,217 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+library(readxl)
+library(rvest)
+library(tidyverse)
+
+#change "Path_to_html" to the file path to the location of the similarweb_webperformance.html
+total_visits <- read_html("C:\\Users\\Shelg\\Documents\\Summercourse\\ISSSV\\similarweb_webperformance.html") %>%
+  html_node("#react-app > div > div.sw-layout-no-scroll-container.sw-layout-section > div.sw-layout-no-scroll-container.sw-layout-section-content.fadeIn.sidebar3-push > div.sw-layout-module-inner > span > div > div > span > div.sw-layout-scrollable-element.sw-layout-research.use-sticky-css-rendering > div.sw-page-websiteAnalysis.sw-layout-page > section > div > section > div > div > div:nth-child(1) > div.BaseFlex-iAyFgw.FlexRow-hSdWYo.TopPageWidgetsRow-jueWMh.WWOTopPageWidgetsRowWrap-blHiBq.xxItJ > div:nth-child(1) > div.TableWrapper-bkCFmX.dPxxTb") %>%
+  html_text2()
+
+#using writeLines() will show the pure text from the html and is useful to analyze text patterns and for further data processing for making tables
+#writeLines(total_visits)
+
+vektor <- unlist(str_split(total_visits, "\n"))
+number_entities = (length(vektor)-1)/2
+entities = vektor[2:6]
+total_visits= vektor[7:11]
+df <- data.frame(Entities = entities, "total_visitors" = total_visits)
+df
+```
+
+```{r}
+df$'total_visitors' <- gsub(pattern = "M", 
+                        replacement = "000000", 
+                        df$'total_visitors')
+df$'total_visitors' <- gsub("\\.", "", df$'total_visitors')
+df
+```
+
+```{r}
+df <- df
+df$'total_visitors'<- as.numeric(df$'total_visitors')
+df
+```
+
+```{r}
+# install.packages("ggplot2")
+# install.packages("plotly")
+library(ggplot2)
+library(plotly)
+
+my_plot <- ggplot(data = df, aes(x = Entities, y = total_visitors)) + 
+  geom_point(size = 5) +
+   labs(x = "Entities", y = "Users in millions", title = "Size of user bases") 
+  #scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M"))
+
+# Custom function to format labels in M format
+format_in_millions <- function(x) {
+  paste0(format(x / 1000000000, big.mark = ",", scientific = FALSE), "M")
+}
+
+# Apply the custom formatting to the y-axis labels
+my_plot + scale_y_continuous(labels = format_in_millions)
+
+```
+
+```{r}
+file_path <- "C:\\Users\\Shelg\\Documents\\Summercourse\\ISSSV\\total_visitors_april_june.xlsx"
+df2 <- read_excel(file_path)
+df2
+```
+
+```{r}
+process_monthly_visits <- function(df, column_name) {
+  df[[column_name]] <- gsub(pattern = "M", replacement = "000000", df[[column_name]])
+  df[[column_name]] <- gsub("\\.", "", df[[column_name]])
+  df[[column_name]] <- gsub("\\,", "", df[[column_name]])
+  df[[column_name]] <- as.numeric(df[[column_name]], na.rm = TRUE)
+  return(df)
+}
+```
+
+```{r}
+
+df2 <- process_monthly_visits(df2,'Monthly visits')
+
+df2
+
+```
+
+```{r}
+my_plot2 <- ggplot(data = df2, aes(x = df2$Entities, y = df2$"Monthly visits")) + 
+  geom_point(size = 5) +
+   labs(x = "Entities", y = "Visiters", title = "Monthly visits") 
+
+my_plot2 + scale_y_continuous(labels = format_in_millions)
+```
+
+```{r}
+# Process columns 
+df2 <- process_monthly_visits(df2,'Monthly unique visitors')
+df2 <- process_monthly_visits(df2,'Page Views')
+df2
+```
+
+```{r}
+#Process Visit duration, was in timestring-format
+
+df2$`Visit duration` <- as.difftime(df2$`Visit duration`, format = "%H:%M:%S")
+df2$`Visit duration` <- as.numeric(df2$`Visit duration`, units = "mins")
+df2
+```
+
+```{r}
+df2$`Visits / Unique visitors` <- as.numeric(df2$`Visits / Unique visitors`)
+df2$`Pages per visit` <- as.numeric(df2$`Pages per visit`)
+df2
+```
+
+```{r}
+#converting % into decimal
+df2$`Bounce rate` <- as.numeric(gsub("%", "", df2$`Bounce rate`))
+df2$`Bounce rate` <- df2$`Bounce rate` / 100
+df2
+```
+
+```{r}
+#If something needs to be read
+#library(openxlsx)
+#write.xlsx(DATAFRAME,"C:\\Users\\Shelg\\Documents\\Summercourse\\ISSSV\\TITLE.xlsx")
+```
+
+```{r}
+#install.packages("janitor")
+library(janitor)
+
+df3 <- df2 %>%
+  clean_names()
+```
+
+Decision tree inshallah
+
+Making a new column acc_score where the accessbility is rated from 0 to 5, where 0 is worst and 5 is best
+
+```{r}
+df3 <-df2[, -1]%>%
+  clean_names()
+#df4$acc_score <- rep(NA, 5)
+# Assuming 'df' is your dataframe
+# Generate random numbers from 0, 1, and 2 with the desired length (number of rows in 'df')
+random_numbers <- sample(1:3, nrow(df3), replace = TRUE)
+
+# Add the new column to the dataframe
+df3$acc_score <- random_numbers
+df3
+```
+
+```{r}
+# Load the required packages
+#install.packages("randomForest")
+#install.packages("randomForestExplainer")
+library(randomForest)
+library(randomForestExplainer)
+
+df3$acc_score <- ifelse(df3$acc_score == 1, "Bad",
+                              ifelse(df3$acc_score == 2, "Okay", "Good"))
+
+# Convert the "Survived" variable into a factor with three levels
+df3$acc_score <- factor(df3$acc_score, levels = c("Bad", "Okay", "Good"))
+
+df3
+# Split the data into training and testing sets
+set.seed(123)  # For reproducibility
+train_indices <- sample(1:nrow(df3), 0.7 * nrow(df3))
+train_data <- df3[train_indices, ]
+test_data <- df3[-train_indices, ]
+
+# Build the Random Forest model
+rf_model <- randomForest(acc_score ~ pages_per_visit + visit_duration, data = df3, ntree = 100)
+
+# Calculate the feature importance
+importance <- randomForest::importance(rf_model)
+
+# Create a bar plot to visualize the feature importance
+barplot(importance, main = "Feature Importance", col = "skyblue", cex.names = 0.8)
+```
+
+```{r}
+rf_model2 <- randomForest(acc_score ~ monthly_visits + visit_duration + pages_per_visit, data = df3, ntree = 100)
+
+# Calculate the feature importance
+importance <- randomForest::importance(rf_model2)
+
+# Create a bar plot to visualize the feature importance
+barplot(importance, main = "Feature Importance", col = "skyblue", cex.names = 0.8)
+```
+
+```{r}
+rf_model2 <- randomForest(acc_score ~ monthly_visits + visit_duration + pages_per_visit + monthly_unique_visitors, data = df3, ntree = 100)
+
+# Calculate the feature importance
+importance <- randomForest::importance(rf_model2)
+
+# Add custom names to the x-axis labels
+names_vec <- c("monthly_visits", "visit_duration", "pages_per_visit", "monthly_unique_visitors")
+par(names_vec)  # Adjust the margin to fit long axis labels
+
+# Create a bar plot to visualize the feature importance
+barplot(importance, main = "Feature Importance", col = "skyblue", cex.names = 0.8,
+        las = 2, xlab = "Variables", ylab = "Importance")
+
+
+
+
+
+Regenerate
+```
